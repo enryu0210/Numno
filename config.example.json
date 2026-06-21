@@ -1,0 +1,8 @@
+{
+  "discord_webhook_url": "여기에_디스코드_웹훅_URL을_붙여넣으세요",
+  "gallery_id": "coffee",
+  "poll_interval_sec": 180,
+  "keywords": ["나눔"],
+  "exclude_keywords": ["나눔후기", "나눔받", "나눔 받", "마감", "나눔완료"],
+  "seen_limit": 1000
+}

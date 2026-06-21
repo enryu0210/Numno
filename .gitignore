@@ -1,0 +1,21 @@
+# 실제 설정 파일 (웹훅 URL 등 민감정보 포함) — 절대 커밋 금지
+config.json
+
+# 런타임 생성 데이터/로그
+data/
+logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# OS / 에디터
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

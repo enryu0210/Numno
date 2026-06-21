@@ -1,0 +1,7 @@
+# 디시 커피갤러리 나눔글 알림 서비스 의존성
+requests>=2.31.0          # HTTP 요청 (갤러리 리스트 가져오기 / 디스코드 웹훅 전송)
+beautifulsoup4>=4.12.0    # HTML 파싱
+lxml>=5.0.0               # BeautifulSoup용 빠른 파서
+
+# 개발/테스트용 (선택)
+pytest>=8.0.0
