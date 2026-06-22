@@ -10,13 +10,18 @@
 ## 동작 방식 (한눈에)
 
 ```
-[3분마다] 갤러리 리스트 긁기 → 처음 보는 글인가? → 제목에 '나눔' 있나? → 디스코드 웹훅 알림
-                                    └ 이미 본 글/나눔 아님 → 무시
+[3분마다] 리스트 긁기 → 처음 보는 글? → 제목에 '나눔' 있나?(키워드 1차) →
+          본문 가져오기 → AI가 진짜 나눔글인지 판단(2차) → 디스코드 웹훅 알림
+                                    └ 이미 본 글 / 키워드 없음 / AI가 '후기·기타' 판정 → 무시
 ```
 
+- **2단계 판별**: ① 제목 키워드로 후보를 싸게 거른 뒤, ② **AI(Gemini)가 본문까지 읽고**
+  '지금 나눠주는 진짜 나눔글'인지 '후기/마감/판매/잡담'인지 판단합니다.
+  → "원두 나눔 잘 받았어요 **후기**"처럼 키워드만으로는 못 거르는 글을 AI가 걸러냅니다.
+- **AI는 선택 기능**: Gemini 키가 없으면 AI를 끄고 **키워드 규칙만으로** 동작합니다.
+  AI 호출이 실패해도 키워드 결과로 안전하게 대체(fallback)되어 서비스가 멈추지 않습니다.
 - **중복 알림 방지**: 한 번 처리한 글 번호를 `data/seen_posts.json`에 저장합니다.
 - **과거 글 폭탄 방지**: 처음 켤 때 올라와 있던 글들은 알림 없이 '본 것'으로만 등록합니다.
-- **오탐 방지**: "나눔후기", "나눔 받았어요", "나눔 마감" 같은 제목은 제외합니다(설정에서 조정 가능).
 
 ---
 
@@ -39,7 +44,9 @@ pip install -r requirements.txt
   "poll_interval_sec": 180,
   "keywords": ["나눔"],
   "exclude_keywords": ["후기", "나눔받", "나눔 받", "마감", "나눔완료"],
-  "seen_limit": 1000
+  "seen_limit": 1000,
+  "gemini_api_key": "구글_AI_스튜디오에서_받은_무료_API_키",
+  "gemini_model": "gemini-2.5-flash"
 }
 ```
 
@@ -51,6 +58,17 @@ pip install -r requirements.txt
 | `keywords` | 나눔글로 볼 제목 키워드 |
 | `exclude_keywords` | 오탐 제거용 제외 키워드 |
 | `seen_limit` | 기억할 최근 글 개수 |
+| `gemini_api_key` | (선택) AI 판별용 Gemini 무료 API 키. **비워두면 AI를 끄고 키워드만 사용** |
+| `gemini_model` | (선택) 사용할 Gemini 모델. 기본 `gemini-2.5-flash`(무료·빠름) |
+
+### 🤖 AI 판별용 Gemini 무료 키 받기
+
+1. [Google AI Studio](https://aistudio.google.com/apikey)에 구글 계정으로 로그인합니다.
+2. **Create API key** 를 눌러 키를 발급받습니다. (개인용 무료 등급으로 충분합니다)
+3. 발급된 키를 `config.json`의 `gemini_api_key`(또는 환경변수 `GEMINI_API_KEY`)에 넣습니다.
+
+> 무료 등급에는 분당 요청 수 제한이 있지만, 이 서비스는 '나눔' 키워드가 들어간 글에만
+> AI를 부르므로 호출량이 적어 무료 등급으로 충분합니다.
 
 ## 실행
 
@@ -93,6 +111,8 @@ python -m pytest tests/ -v
 | `KEYWORDS` | | 나눔 키워드(쉼표 구분) | `나눔` |
 | `EXCLUDE_KEYWORDS` | | 제외 키워드(쉼표 구분) | `후기,나눔받,마감,나눔완료` |
 | `SEEN_LIMIT` | | 기억할 최근 글 개수 | `1000` |
+| `GEMINI_API_KEY` | | AI 판별용 Gemini 무료 키(없으면 AI 끔) | `AIza...` |
+| `GEMINI_MODEL` | | 사용할 Gemini 모델 | `gemini-2.5-flash` |
 
 ### ⚠️ 꼭 알아야 할 점: Volume(영구 디스크) 연결
 
@@ -126,11 +146,13 @@ Numno/
 ├── railway.json         # Railway 배포 설정
 ├── requirements.txt
 ├── src/
-│   ├── main.py          # 진입점 + 폴링 루프
+│   ├── main.py          # 진입점 + 폴링 루프 (키워드→본문→AI 판별 조합)
 │   ├── config.py        # 설정 로드/검증
 │   ├── models.py        # Post 데이터 모델
 │   ├── scraper.py       # 리스트 크롤링/파싱
-│   ├── detector.py      # 나눔글 판별
+│   ├── detector.py      # 나눔글 1차 판별 (키워드)
+│   ├── post_fetcher.py  # 게시글 본문 가져오기 (AI 입력용)
+│   ├── ai_classifier.py # 나눔글 2차 판별 (Gemini AI)
 │   ├── notifier.py      # 디스코드 웹훅 전송
 │   ├── storage.py       # 본 글 저장(중복 방지)
 │   └── logger.py        # 로깅

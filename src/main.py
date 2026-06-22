@@ -19,14 +19,52 @@ import time
 
 import requests
 
+from .ai_classifier import build_classifier
 from .config import ConfigError, load_config
 from .detector import is_giveaway
 from .logger import get_logger
 from .notifier import send_discord
+from .post_fetcher import fetch_body
 from .scraper import fetch_posts
 from .storage import SeenStore
 
 log = get_logger()
+
+
+def _is_real_giveaway(post, config, session, classifier) -> bool:
+    """이 글을 알릴 '진짜 나눔글'로 볼지 최종 판단한다.
+
+    2단계 판별:
+      1) 키워드 1차 필터(저렴): 제목에 키워드 없으면 바로 탈락.
+         → AI 호출 비용을 '나눔 후보'에만 쓰기 위한 게이트.
+      2) AI 2차 판별(정밀): 본문을 가져와 Gemini에게 진짜 나눔글인지 묻는다.
+         - AI가 없거나(키 미설정) 판단 불가(오류)면 1차 키워드 결과를 그대로 쓴다
+           (안전한 대체: AI가 죽어도 기존 동작 유지).
+    """
+    # 1차: 키워드 후보가 아니면 AI를 부를 것도 없이 탈락
+    keyword_hit = is_giveaway(post, config.keywords, config.exclude_keywords)
+    if not keyword_hit:
+        return False
+
+    # AI 미사용 → 키워드 결과로 확정
+    if classifier is None:
+        return True
+
+    # 2차: 본문을 가져와 AI에게 진짜 나눔글인지 판단 요청
+    body = fetch_body(post, config, session)
+    result = classifier.classify(post.title, body)
+
+    if result.decision is None:
+        # 판단 불가 → 키워드 결과로 대체(놓침 방지)
+        log.warning("AI 판단 불가, 키워드 결과 사용: [%s] %s", post.no, post.title)
+        return True
+
+    log.info(
+        "AI 판별: [%s] %s → %s (%s)",
+        post.no, post.title,
+        "나눔" if result.decision else "제외", result.reason,
+    )
+    return result.decision
 
 
 def _bootstrap(posts, store: SeenStore) -> None:
@@ -37,7 +75,7 @@ def _bootstrap(posts, store: SeenStore) -> None:
     log.info("첫 실행 부트스트랩 완료: 기존 글 %d건을 알림 없이 등록", len(posts))
 
 
-def _process(posts, store: SeenStore, config, session, dry_run: bool) -> int:
+def _process(posts, store: SeenStore, config, session, dry_run: bool, classifier) -> int:
     """처음 보는 글들을 검사해 나눔글이면 알린다. 반환값은 알린 건수.
 
     핵심 규칙: 나눔글이든 아니든 '처음 본 글'은 전부 seen 에 등록한다.
@@ -49,7 +87,7 @@ def _process(posts, store: SeenStore, config, session, dry_run: bool) -> int:
         if store.contains(post.no):
             continue  # 이미 처리한 글
 
-        if is_giveaway(post, config.keywords, config.exclude_keywords):
+        if _is_real_giveaway(post, config, session, classifier):
             if dry_run:
                 log.info("[DRY-RUN] 나눔글 감지: [%s] %s (%s)", post.no, post.title, post.url)
                 store.add(post.no)
@@ -79,10 +117,13 @@ def run(once: bool = False, dry_run: bool = False) -> None:
     store = SeenStore(limit=config.seen_limit)
     store.load()
     session = requests.Session()
+    # AI 분류기 준비(키 없으면 None → 키워드 규칙만 사용)
+    classifier = build_classifier(config)
 
     log.info(
-        "Numno 시작 | 갤러리=%s | 주기=%d초 | 키워드=%s | dry_run=%s",
-        config.gallery_id, config.poll_interval_sec, config.keywords, dry_run,
+        "Numno 시작 | 갤러리=%s | 주기=%d초 | 키워드=%s | AI=%s | dry_run=%s",
+        config.gallery_id, config.poll_interval_sec, config.keywords,
+        "켜짐" if classifier else "꺼짐", dry_run,
     )
 
     # --- 첫 실행 부트스트랩 ---
@@ -104,7 +145,7 @@ def run(once: bool = False, dry_run: bool = False) -> None:
             try:
                 posts = fetch_posts(config, session)
                 if posts:
-                    n = _process(posts, store, config, session, dry_run)
+                    n = _process(posts, store, config, session, dry_run, classifier)
                     log.info("폴링 완료: 글 %d건 확인, 신규 알림 %d건", len(posts), n)
                 else:
                     log.info("폴링 완료: 가져온 글 없음")

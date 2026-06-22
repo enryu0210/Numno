@@ -44,6 +44,9 @@ class Config:
     keywords: list[str] = field(default_factory=lambda: ["나눔"])
     exclude_keywords: list[str] = field(default_factory=list)
     seen_limit: int = 1000
+    # AI(제미나이) 판별용. 키가 비어 있으면 AI를 끄고 키워드 규칙만 쓴다.
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
 
     @property
     def list_url(self) -> str:
@@ -74,6 +77,8 @@ def _build_config(
     keywords: list[str] | None,
     exclude_keywords: list[str] | None,
     seen_limit: int,
+    gemini_api_key: str = "",
+    gemini_model: str = "gemini-2.5-flash",
 ) -> Config:
     """공통 검증 후 Config 를 생성한다. (파일/환경변수 두 경로가 공유)"""
     # 필수값 검증 — 웹훅 URL이 비었거나 예시 그대로면 동작 불가
@@ -92,6 +97,9 @@ def _build_config(
         keywords=keywords or ["나눔"],
         exclude_keywords=exclude_keywords or [],
         seen_limit=seen_limit,
+        # AI는 선택 기능 — 키가 없으면 빈 문자열로 두고 키워드 규칙만 쓴다.
+        gemini_api_key=(gemini_api_key or "").strip(),
+        gemini_model=(gemini_model or "gemini-2.5-flash").strip(),
     )
 
 
@@ -110,6 +118,8 @@ def _load_from_file(path: str) -> Config:
         keywords=raw.get("keywords"),
         exclude_keywords=raw.get("exclude_keywords"),
         seen_limit=int(raw.get("seen_limit", 1000)),
+        gemini_api_key=raw.get("gemini_api_key", ""),
+        gemini_model=raw.get("gemini_model", "gemini-2.5-flash"),
     )
 
 
@@ -120,6 +130,7 @@ def _load_from_env() -> Config:
       DISCORD_WEBHOOK_URL  (필수)
       GALLERY_ID, POLL_INTERVAL_SEC, SEEN_LIMIT (선택)
       KEYWORDS, EXCLUDE_KEYWORDS  (선택, 쉼표로 구분)
+      GEMINI_API_KEY, GEMINI_MODEL  (선택, AI 판별용)
     """
     env = os.environ
     if not env.get("DISCORD_WEBHOOK_URL"):
@@ -137,6 +148,8 @@ def _load_from_env() -> Config:
         keywords=_split_keywords(env.get("KEYWORDS")),
         exclude_keywords=_split_keywords(env.get("EXCLUDE_KEYWORDS")),
         seen_limit=int(env.get("SEEN_LIMIT", "1000")),
+        gemini_api_key=env.get("GEMINI_API_KEY", ""),
+        gemini_model=env.get("GEMINI_MODEL", "gemini-2.5-flash"),
     )
 
 
