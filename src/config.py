@@ -78,7 +78,7 @@ def _build_config(
     exclude_keywords: list[str] | None,
     seen_limit: int,
     gemini_api_key: str = "",
-    gemini_model: str = "gemini-2.5-flash",
+    gemini_model: str = "gemini-3.5-flash",
 ) -> Config:
     """공통 검증 후 Config 를 생성한다. (파일/환경변수 두 경로가 공유)"""
     # 필수값 검증 — 웹훅 URL이 비었거나 예시 그대로면 동작 불가
@@ -99,7 +99,7 @@ def _build_config(
         seen_limit=seen_limit,
         # AI는 선택 기능 — 키가 없으면 빈 문자열로 두고 키워드 규칙만 쓴다.
         gemini_api_key=(gemini_api_key or "").strip(),
-        gemini_model=(gemini_model or "gemini-2.5-flash").strip(),
+        gemini_model=(gemini_model or "gemini-3.5-flash").strip(),
     )
 
 
@@ -119,7 +119,7 @@ def _load_from_file(path: str) -> Config:
         exclude_keywords=raw.get("exclude_keywords"),
         seen_limit=int(raw.get("seen_limit", 1000)),
         gemini_api_key=raw.get("gemini_api_key", ""),
-        gemini_model=raw.get("gemini_model", "gemini-2.5-flash"),
+        gemini_model=raw.get("gemini_model", "gemini-3.5-flash"),
     )
 
 
@@ -149,7 +149,7 @@ def _load_from_env() -> Config:
         exclude_keywords=_split_keywords(env.get("EXCLUDE_KEYWORDS")),
         seen_limit=int(env.get("SEEN_LIMIT", "1000")),
         gemini_api_key=env.get("GEMINI_API_KEY", ""),
-        gemini_model=env.get("GEMINI_MODEL", "gemini-2.5-flash"),
+        gemini_model=env.get("GEMINI_MODEL", "gemini-3.5-flash"),
     )
 
 
