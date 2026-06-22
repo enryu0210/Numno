@@ -46,7 +46,7 @@ class Config:
     seen_limit: int = 1000
     # AI(제미나이) 판별용. 키가 비어 있으면 AI를 끄고 키워드 규칙만 쓴다.
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-3.5-flash"
 
     @property
     def list_url(self) -> str:
