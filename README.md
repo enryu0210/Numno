@@ -46,7 +46,7 @@ pip install -r requirements.txt
   "exclude_keywords": ["후기", "나눔받", "나눔 받", "마감", "나눔완료"],
   "seen_limit": 1000,
   "gemini_api_key": "구글_AI_스튜디오에서_받은_무료_API_키",
-  "gemini_model": "gemini-2.5-flash"
+  "gemini_model": "gemini-3.5-flash"
 }
 ```
 
@@ -59,7 +59,7 @@ pip install -r requirements.txt
 | `exclude_keywords` | 오탐 제거용 제외 키워드 |
 | `seen_limit` | 기억할 최근 글 개수 |
 | `gemini_api_key` | (선택) AI 판별용 Gemini 무료 API 키. **비워두면 AI를 끄고 키워드만 사용** |
-| `gemini_model` | (선택) 사용할 Gemini 모델. 기본 `gemini-2.5-flash`(무료·빠름) |
+| `gemini_model` | (선택) 사용할 Gemini 모델. 기본 `gemini-3.5-flash`(무료·빠름) |
 
 ### 🤖 AI 판별용 Gemini 무료 키 받기
 
@@ -112,7 +112,7 @@ python -m pytest tests/ -v
 | `EXCLUDE_KEYWORDS` | | 제외 키워드(쉼표 구분) | `후기,나눔받,마감,나눔완료` |
 | `SEEN_LIMIT` | | 기억할 최근 글 개수 | `1000` |
 | `GEMINI_API_KEY` | | AI 판별용 Gemini 무료 키(없으면 AI 끔) | `AIza...` |
-| `GEMINI_MODEL` | | 사용할 Gemini 모델 | `gemini-2.5-flash` |
+| `GEMINI_MODEL` | | 사용할 Gemini 모델 | `gemini-3.5-flash` |
 
 ### ⚠️ 꼭 알아야 할 점: Volume(영구 디스크) 연결
 
