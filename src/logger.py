@@ -7,10 +7,11 @@
 import logging
 import os
 
-from .config import PROJECT_ROOT
+# LOG_DIR 은 config 에서 한 곳에 정의한다.
+# (로컬은 프로젝트의 logs/, 클라우드는 LOG_DIR 환경변수로 경로 지정 가능)
+from .config import LOG_DIR
 
-_LOG_DIR = os.path.join(PROJECT_ROOT, "logs")
-_LOG_FILE = os.path.join(_LOG_DIR, "numno.log")
+_LOG_FILE = os.path.join(LOG_DIR, "numno.log")
 
 
 def get_logger(name: str = "numno") -> logging.Logger:
@@ -33,7 +34,7 @@ def get_logger(name: str = "numno") -> logging.Logger:
     logger.addHandler(console)
 
     # 파일 출력 (logs 폴더가 없으면 만든다)
-    os.makedirs(_LOG_DIR, exist_ok=True)
+    os.makedirs(LOG_DIR, exist_ok=True)
     file_handler = logging.FileHandler(_LOG_FILE, encoding="utf-8")
     file_handler.setFormatter(fmt)
     logger.addHandler(file_handler)

@@ -73,12 +73,57 @@ python -m pytest tests/ -v
 
 ---
 
+## ☁️ Railway 배포 (24시간 상시 실행)
+
+내 PC를 계속 켜둘 필요 없이, [Railway](https://railway.app)에 올려 24시간 돌릴 수 있습니다.
+이 저장소에는 Railway용 `Procfile`과 `railway.json`이 포함되어 있습니다.
+
+### 설정은 파일 대신 "환경변수"로
+
+클라우드에는 `config.json`(웹훅 URL 등 비밀정보)을 올리지 않습니다.
+대신 Railway 대시보드의 **Variables(환경변수)**에 값을 넣습니다.
+코드가 `config.json`이 없으면 자동으로 환경변수에서 설정을 읽습니다.
+
+| 환경변수 | 필수 | 설명 | 예시 |
+|---|:---:|---|---|
+| `DISCORD_WEBHOOK_URL` | ✅ | 디스코드 웹훅 URL | `https://discord.com/api/webhooks/...` |
+| `DATA_DIR` | ✅(권장) | '본 글' 기록 저장 경로(아래 Volume 참고) | `/data` |
+| `GALLERY_ID` | | 갤러리 id | `coffee` |
+| `POLL_INTERVAL_SEC` | | 폴링 주기(초) | `180` |
+| `KEYWORDS` | | 나눔 키워드(쉼표 구분) | `나눔` |
+| `EXCLUDE_KEYWORDS` | | 제외 키워드(쉼표 구분) | `나눔후기,나눔받,마감,나눔완료` |
+| `SEEN_LIMIT` | | 기억할 최근 글 개수 | `1000` |
+
+### ⚠️ 꼭 알아야 할 점: Volume(영구 디스크) 연결
+
+Railway 컨테이너는 **재배포·재시작 때마다 디스크가 초기화**됩니다.
+그냥 두면 '이미 본 글' 기록(`seen_posts.json`)이 사라져,
+재시작 순간 올라와 있던 나눔글을 **알림 없이 놓칠 수 있습니다.**
+
+이를 막으려면 **Volume**을 붙이고, 그 경로를 `DATA_DIR`로 지정하세요.
+
+### 배포 순서
+
+1. 이 저장소를 GitHub에 올립니다. (`config.json`은 `.gitignore`로 제외되어 안전)
+2. Railway에서 **New Project → Deploy from GitHub repo**로 이 저장소를 선택합니다.
+3. 서비스 설정 → **Variables**에 위 표의 환경변수를 입력합니다.
+4. 서비스 설정 → **Volumes**에서 새 Volume을 추가하고 **Mount path를 `/data`**로 지정합니다.
+   (그리고 `DATA_DIR` 환경변수도 `/data`로 맞춰주세요.)
+5. 배포가 끝나면 **Deploy Logs**에 `Numno 시작 ...` / `폴링 완료 ...` 로그가 보이는지 확인합니다.
+
+> 💡 이 서비스는 웹서버가 아니라 **상시 워커(worker)**라 외부 포트를 열지 않습니다.
+> Railway는 무료 크레딧을 사용량만큼 소진하니, `POLL_INTERVAL_SEC`을 너무 짧게 두지 마세요(기본 180초 권장).
+
+---
+
 ## 폴더 구조
 
 ```
 Numno/
 ├── config.json          # 내 설정 (직접 만들기, git 제외)
 ├── config.example.json  # 설정 예시
+├── Procfile             # Railway/Heroku 실행 명령 (worker)
+├── railway.json         # Railway 배포 설정
 ├── requirements.txt
 ├── src/
 │   ├── main.py          # 진입점 + 폴링 루프

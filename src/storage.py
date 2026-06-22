@@ -10,10 +10,11 @@ import json
 import os
 import tempfile
 
-from .config import PROJECT_ROOT
+# DATA_DIR 은 config 에서 한 곳에 정의한다.
+# (로컬은 프로젝트의 data/, 클라우드는 DATA_DIR 환경변수로 영구 디스크 지정)
+from .config import DATA_DIR
 
-_DATA_DIR = os.path.join(PROJECT_ROOT, "data")
-_SEEN_FILE = os.path.join(_DATA_DIR, "seen_posts.json")
+_SEEN_FILE = os.path.join(DATA_DIR, "seen_posts.json")
 
 
 class SeenStore:
@@ -76,9 +77,9 @@ class SeenStore:
         임시 파일에 먼저 쓴 뒤 교체(os.replace)하여, 저장 도중 중단되어도
         기존 파일이 손상되지 않게 한다.
         """
-        os.makedirs(_DATA_DIR, exist_ok=True)
+        os.makedirs(DATA_DIR, exist_ok=True)
         # 같은 디렉터리에 임시 파일 생성(같은 볼륨이어야 os.replace 가 원자적)
-        fd, tmp_path = tempfile.mkstemp(dir=_DATA_DIR, suffix=".tmp")
+        fd, tmp_path = tempfile.mkstemp(dir=DATA_DIR, suffix=".tmp")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(self._order, f, ensure_ascii=False)

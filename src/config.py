@@ -1,7 +1,15 @@
 """설정 로드 및 검증.
 
-config.json 을 읽어 Config 객체로 만든다.
-필수값(웹훅 URL)이 비어 있으면 친절한 한국어 메시지로 즉시 종료시킨다.
+설정은 두 가지 방법으로 줄 수 있다(우선순위 순):
+  1) config.json 파일 (로컬 PC에서 실행할 때 편함)
+  2) 환경변수            (Railway 등 클라우드 배포 시 권장)
+
+config.json 이 있으면 그걸 쓰고, 없으면 환경변수에서 읽는다.
+어느 쪽이든 필수값(웹훅 URL)이 비어 있으면 친절한 한국어 메시지로 즉시 종료시킨다.
+
+저장 경로(data/, logs/)도 여기서 한 곳에 정의한다.
+클라우드에서는 컨테이너가 재시작되면 파일이 사라지므로(휘발성),
+DATA_DIR 환경변수로 영구 디스크(Railway Volume 등) 경로를 지정할 수 있게 했다.
 """
 
 import json
@@ -13,6 +21,13 @@ from dataclasses import dataclass, field
 _SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(_SRC_DIR)
 DEFAULT_CONFIG_PATH = os.path.join(PROJECT_ROOT, "config.json")
+
+# 데이터/로그 저장 경로.
+# - 로컬: 프로젝트 폴더 안의 data/, logs/
+# - 클라우드: DATA_DIR / LOG_DIR 환경변수로 영구 디스크 경로를 지정
+#   (지정 안 하면 재배포 때마다 '본 글' 기록이 사라져 알림을 놓칠 수 있음)
+DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(PROJECT_ROOT, "data")
+LOG_DIR = os.environ.get("LOG_DIR") or os.path.join(PROJECT_ROOT, "logs")
 
 
 class ConfigError(Exception):
@@ -40,44 +55,100 @@ class Config:
         return f"https://gall.dcinside.com/mgallery/board/lists/?id={self.gallery_id}"
 
 
-def load_config(path: str = DEFAULT_CONFIG_PATH) -> Config:
-    """config.json 을 읽어 Config 를 반환한다.
+def _split_keywords(raw: str | None) -> list[str] | None:
+    """쉼표로 구분된 환경변수 문자열을 키워드 리스트로 변환한다.
 
-    Args:
-        path: 설정 파일 경로. 기본값은 프로젝트 루트의 config.json.
-
-    Raises:
-        ConfigError: 파일이 없거나, JSON 형식 오류이거나, 필수값이 비었을 때.
+    예: "나눔후기,마감, 나눔완료" → ["나눔후기", "마감", "나눔완료"]
+    값이 없으면 None 을 반환해 호출부에서 기본값을 쓰게 한다.
     """
-    # 1) 파일 존재 확인 — 없으면 예시 파일을 복사하라고 안내
-    if not os.path.exists(path):
+    if not raw:
+        return None
+    items = [part.strip() for part in raw.split(",")]
+    return [item for item in items if item]  # 빈 항목 제거
+
+
+def _build_config(
+    webhook: str,
+    gallery_id: str,
+    poll_interval_sec: int,
+    keywords: list[str] | None,
+    exclude_keywords: list[str] | None,
+    seen_limit: int,
+) -> Config:
+    """공통 검증 후 Config 를 생성한다. (파일/환경변수 두 경로가 공유)"""
+    # 필수값 검증 — 웹훅 URL이 비었거나 예시 그대로면 동작 불가
+    webhook = (webhook or "").strip()
+    if not webhook or not webhook.startswith("http"):
         raise ConfigError(
-            f"설정 파일이 없습니다: {path}\n"
-            "→ config.example.json 을 config.json 으로 복사한 뒤 "
-            "디스코드 웹훅 URL을 채워주세요."
+            "discord_webhook_url 이 비어 있거나 잘못되었습니다.\n"
+            "→ config.json 의 discord_webhook_url 또는 "
+            "환경변수 DISCORD_WEBHOOK_URL 에 실제 웹훅 URL을 넣어주세요."
         )
 
-    # 2) JSON 파싱 (형식이 깨졌으면 어디가 문제인지 알려줌)
+    return Config(
+        discord_webhook_url=webhook,
+        gallery_id=gallery_id or "coffee",
+        poll_interval_sec=poll_interval_sec,
+        keywords=keywords or ["나눔"],
+        exclude_keywords=exclude_keywords or [],
+        seen_limit=seen_limit,
+    )
+
+
+def _load_from_file(path: str) -> Config:
+    """config.json 파일에서 설정을 읽는다."""
     try:
         with open(path, "r", encoding="utf-8") as f:
             raw = json.load(f)
     except json.JSONDecodeError as e:
         raise ConfigError(f"config.json 형식이 잘못되었습니다: {e}") from e
 
-    # 3) 필수값 검증 — 웹훅 URL이 비었거나 예시 그대로면 동작 불가
-    webhook = (raw.get("discord_webhook_url") or "").strip()
-    if not webhook or not webhook.startswith("http"):
-        raise ConfigError(
-            "discord_webhook_url 이 비어 있거나 잘못되었습니다.\n"
-            "→ config.json 에 실제 디스코드 웹훅 URL을 넣어주세요."
-        )
-
-    # 4) 기본값과 병합하여 Config 생성
-    return Config(
-        discord_webhook_url=webhook,
+    return _build_config(
+        webhook=raw.get("discord_webhook_url", ""),
         gallery_id=raw.get("gallery_id", "coffee"),
         poll_interval_sec=int(raw.get("poll_interval_sec", 180)),
-        keywords=raw.get("keywords") or ["나눔"],
-        exclude_keywords=raw.get("exclude_keywords") or [],
+        keywords=raw.get("keywords"),
+        exclude_keywords=raw.get("exclude_keywords"),
         seen_limit=int(raw.get("seen_limit", 1000)),
     )
+
+
+def _load_from_env() -> Config:
+    """환경변수에서 설정을 읽는다. (Railway 등 클라우드 배포용)
+
+    지원 환경변수:
+      DISCORD_WEBHOOK_URL  (필수)
+      GALLERY_ID, POLL_INTERVAL_SEC, SEEN_LIMIT (선택)
+      KEYWORDS, EXCLUDE_KEYWORDS  (선택, 쉼표로 구분)
+    """
+    env = os.environ
+    if not env.get("DISCORD_WEBHOOK_URL"):
+        # 파일도 없고 환경변수도 없는 경우 → 둘 중 하나를 채우라고 안내
+        raise ConfigError(
+            "설정을 찾을 수 없습니다.\n"
+            f"→ 로컬 실행: config.example.json 을 config.json 으로 복사 후 웹훅 URL 입력\n"
+            "→ 클라우드(Railway 등): 환경변수 DISCORD_WEBHOOK_URL 을 설정"
+        )
+
+    return _build_config(
+        webhook=env.get("DISCORD_WEBHOOK_URL", ""),
+        gallery_id=env.get("GALLERY_ID", "coffee"),
+        poll_interval_sec=int(env.get("POLL_INTERVAL_SEC", "180")),
+        keywords=_split_keywords(env.get("KEYWORDS")),
+        exclude_keywords=_split_keywords(env.get("EXCLUDE_KEYWORDS")),
+        seen_limit=int(env.get("SEEN_LIMIT", "1000")),
+    )
+
+
+def load_config(path: str = DEFAULT_CONFIG_PATH) -> Config:
+    """설정을 로드해 Config 를 반환한다.
+
+    config.json 파일이 있으면 그걸 우선 사용하고,
+    없으면 환경변수에서 읽는다(클라우드 배포 대응).
+
+    Raises:
+        ConfigError: 설정을 찾을 수 없거나, 형식 오류이거나, 필수값이 비었을 때.
+    """
+    if os.path.exists(path):
+        return _load_from_file(path)
+    return _load_from_env()
