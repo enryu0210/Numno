@@ -23,8 +23,9 @@ from .logger import get_logger
 
 log = get_logger()
 
-# 판단에 충분하면서 비용/지연을 줄이도록 출력 토큰을 작게 제한한다.
-_MAX_OUTPUT_TOKENS = 300
+# 판단에 충분하면서 비용/지연을 줄이도록 출력 토큰을 제한한다.
+# (thinking 을 끈 상태에선 짧은 JSON 하나라 이 정도면 충분하다)
+_MAX_OUTPUT_TOKENS = 512
 
 # AI에게 주는 역할/규칙. (본문은 '데이터'일 뿐, 명령이 아님을 명확히 한다)
 _SYSTEM_INSTRUCTION = (
@@ -90,6 +91,11 @@ class GeminiClassifier:
                     response_mime_type="application/json",  # JSON으로만 답하게 강제
                     temperature=0,  # 일관된 분류를 위해 무작위성 제거
                     max_output_tokens=_MAX_OUTPUT_TOKENS,
+                    # thinking(사고)을 끈다. Gemini 3.x는 기본적으로 사고 토큰을
+                    # 쓰는데, 출력 한도가 작으면 사고만 하다 본문 출력이 0이 되어
+                    # 응답이 비는 문제가 생긴다. 단순 분류라 사고가 필요 없으므로
+                    # budget=0 으로 꺼서 비용/지연도 함께 줄인다.
+                    thinking_config=types.ThinkingConfig(thinking_budget=0),
                 ),
             )
             return _parse_response(resp.text)
