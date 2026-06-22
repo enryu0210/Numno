@@ -13,7 +13,7 @@ from src.detector import is_giveaway
 from src.models import Post
 
 KEYWORDS = ["나눔"]
-EXCLUDE = ["나눔후기", "나눔받", "나눔 받", "마감", "나눔완료"]
+EXCLUDE = ["후기", "나눔받", "나눔 받", "마감", "나눔완료"]
 
 
 def _post(title: str) -> Post:
@@ -39,6 +39,13 @@ def test_giveaway_bracket():
 # --- 오탐 방지: 제외어가 있으면 False ---
 def test_exclude_review():
     assert is_giveaway(_post("지난번 나눔후기 올립니다"), KEYWORDS, EXCLUDE) is False
+
+
+def test_exclude_review_separated():
+    # 회귀 테스트: '나눔'과 '후기'가 떨어져 있어도 후기글이면 걸러야 한다.
+    # (기존엔 제외어가 "나눔후기" 붙은 형태라서 이런 제목이 알림으로 새어 나갔음)
+    assert is_giveaway(_post("원두 나눔 잘 받았어요 후기"), KEYWORDS, EXCLUDE) is False
+    assert is_giveaway(_post("[후기] 지난 나눔 정말 좋았습니다"), KEYWORDS, EXCLUDE) is False
 
 
 def test_exclude_received():

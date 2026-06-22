@@ -3,6 +3,6 @@
   "gallery_id": "coffee",
   "poll_interval_sec": 180,
   "keywords": ["나눔"],
-  "exclude_keywords": ["나눔후기", "나눔받", "나눔 받", "마감", "나눔완료"],
+  "exclude_keywords": ["후기", "나눔받", "나눔 받", "마감", "나눔완료"],
   "seen_limit": 1000
 }

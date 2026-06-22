@@ -14,6 +14,14 @@ log = get_logger()
 
 _BASE = "https://gall.dcinside.com"
 
+# 알림 링크는 '모바일 보기' URL로 만든다.
+# 이유: 디스코드(특히 모바일/인앱 브라우저)에서 PC용 보기 링크
+#   (gall.dcinside.com/.../view/?id=...&no=...)로 들어가면 디시가
+#   빈/깨진 페이지를 주는 경우가 많다. 반면 m.dcinside.com 링크는
+#   모바일에선 그대로, 데스크톱에선 PC 페이지로 자동 리다이렉트되어
+#   양쪽 모두 정상적으로 본문이 보인다.
+_MOBILE_BASE = "https://m.dcinside.com"
+
 # 디시는 봇을 차단하므로 실제 브라우저처럼 보이는 헤더가 필수다.
 _HEADERS = {
     "User-Agent": (
@@ -103,8 +111,9 @@ def _parse_row(row, gallery_id: str) -> Post | None:
         return None
 
     title = link.get_text(strip=True)
-    href = link.get("href", "")
-    url = href if href.startswith("http") else _BASE + href
+    # 보기 링크는 글번호(num_text)로 모바일 URL을 직접 만든다.
+    # (href를 그대로 쓰지 않는 이유는 위 _MOBILE_BASE 주석 참고)
+    url = f"{_MOBILE_BASE}/board/{gallery_id}/{num_text}"
 
     # 글쓴이
     writer_cell = row.select_one("td.gall_writer")

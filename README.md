@@ -38,7 +38,7 @@ pip install -r requirements.txt
   "gallery_id": "coffee",
   "poll_interval_sec": 180,
   "keywords": ["나눔"],
-  "exclude_keywords": ["나눔후기", "나눔받", "나눔 받", "마감", "나눔완료"],
+  "exclude_keywords": ["후기", "나눔받", "나눔 받", "마감", "나눔완료"],
   "seen_limit": 1000
 }
 ```
@@ -91,7 +91,7 @@ python -m pytest tests/ -v
 | `GALLERY_ID` | | 갤러리 id | `coffee` |
 | `POLL_INTERVAL_SEC` | | 폴링 주기(초) | `180` |
 | `KEYWORDS` | | 나눔 키워드(쉼표 구분) | `나눔` |
-| `EXCLUDE_KEYWORDS` | | 제외 키워드(쉼표 구분) | `나눔후기,나눔받,마감,나눔완료` |
+| `EXCLUDE_KEYWORDS` | | 제외 키워드(쉼표 구분) | `후기,나눔받,마감,나눔완료` |
 | `SEEN_LIMIT` | | 기억할 최근 글 개수 | `1000` |
 
 ### ⚠️ 꼭 알아야 할 점: Volume(영구 디스크) 연결
