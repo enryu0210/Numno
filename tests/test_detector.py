@@ -9,7 +9,7 @@ import sys
 # tests/ 에서 실행해도 src 패키지를 import 할 수 있게 루트 경로 추가
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.detector import is_giveaway
+from src.detector import is_giveaway, is_giveaway_text
 from src.models import Post
 
 KEYWORDS = ["나눔"]
@@ -63,3 +63,26 @@ def test_unrelated():
 
 def test_empty_title():
     assert is_giveaway(_post(""), KEYWORDS, EXCLUDE) is False
+
+
+# --- 본문 키워드 검사: is_giveaway_text (제목에 없고 본문에만 쓴 글 대응) ---
+def test_body_keyword_hit():
+    # 제목엔 '나눔'이 없어도 본문에 있으면 후보로 잡아야 한다.
+    body = "오늘 원두가 너무 많이 남아서 필요하신 분께 나눔하려고 합니다."
+    assert is_giveaway_text(body, KEYWORDS, EXCLUDE) is True
+
+
+def test_body_no_keyword():
+    body = "오늘 내린 라떼가 정말 맛있네요. 다들 좋은 하루 보내세요."
+    assert is_giveaway_text(body, KEYWORDS, EXCLUDE) is False
+
+
+def test_body_exclude_wins():
+    # 본문에 '나눔'이 있어도 제외어(후기)가 함께 있으면 탈락시킨다.
+    body = "지난번 나눔 받은 원두 후기 남깁니다. 정말 맛있었어요."
+    assert is_giveaway_text(body, KEYWORDS, EXCLUDE) is False
+
+
+def test_body_empty():
+    # 본문 파싱 실패로 빈 문자열이 와도 죽지 않고 False.
+    assert is_giveaway_text("", KEYWORDS, EXCLUDE) is False

@@ -21,7 +21,7 @@ import requests
 
 from .ai_classifier import build_classifier
 from .config import ConfigError, load_config
-from .detector import is_giveaway
+from .detector import is_giveaway, is_giveaway_text
 from .logger import get_logger
 from .notifier import send_discord
 from .post_fetcher import fetch_body
@@ -35,14 +35,32 @@ def _is_real_giveaway(post, config, session, classifier) -> bool:
     """이 글을 알릴 '진짜 나눔글'로 볼지 최종 판단한다.
 
     2단계 판별:
-      1) 키워드 1차 필터(저렴): 제목에 키워드 없으면 바로 탈락.
-         → AI 호출 비용을 '나눔 후보'에만 쓰기 위한 게이트.
-      2) AI 2차 판별(정밀): 본문을 가져와 Gemini에게 진짜 나눔글인지 묻는다.
+      1) 키워드 1차 필터(저렴 → 비쌈 순서):
+         a. 제목에 키워드가 있으면 바로 후보. (네트워크 비용 0)
+         b. 제목에 없으면 '본문'을 가져와 본문 키워드까지 검사한다.
+            (제목엔 '나눔'을 안 쓰고 본문에만 쓰는 글이 많아서 추가함)
+         → 제목·본문 어디에도 키워드가 없으면 여기서 탈락.
+      2) AI 2차 판별(정밀): 본문을 Gemini에게 보여 진짜 나눔글인지 묻는다.
+         - 1차에서 이미 받아온 본문이 있으면 그대로 재사용해 중복 요청을 막는다.
          - AI가 없거나(키 미설정) 판단 불가(오류)면 1차 키워드 결과를 그대로 쓴다
            (안전한 대체: AI가 죽어도 기존 동작 유지).
+
+    주의(비용): 제목에 키워드가 없는 글은 본문을 받아와야 하므로, 신규 글
+    대부분에 대해 디시로 추가 요청이 나간다. 차단/지연이 보이면 폴링 주기를
+    늘리는 걸로 대응한다.
     """
-    # 1차: 키워드 후보가 아니면 AI를 부를 것도 없이 탈락
+    # 1차-a: 제목에 키워드가 있으면 본문을 안 봐도 후보 확정 (가장 쌈)
     keyword_hit = is_giveaway(post, config.keywords, config.exclude_keywords)
+
+    # 본문은 한 번만 받아와 1차(본문 검사)와 2차(AI)에서 공유한다.
+    body = None
+
+    # 1차-b: 제목엔 없을 때만 본문을 받아와 본문 키워드까지 검사
+    if not keyword_hit:
+        body = fetch_body(post, config, session)
+        keyword_hit = is_giveaway_text(body, config.keywords, config.exclude_keywords)
+
+    # 제목·본문 어디에도 키워드 없음 → 탈락
     if not keyword_hit:
         return False
 
@@ -50,8 +68,10 @@ def _is_real_giveaway(post, config, session, classifier) -> bool:
     if classifier is None:
         return True
 
-    # 2차: 본문을 가져와 AI에게 진짜 나눔글인지 판단 요청
-    body = fetch_body(post, config, session)
+    # 2차: 본문을 AI에게 넘겨 진짜 나눔글인지 판단 요청
+    # (1차-b에서 이미 받아왔으면 재사용, 아니면 지금 받아온다)
+    if body is None:
+        body = fetch_body(post, config, session)
     result = classifier.classify(post.title, body)
 
     if result.decision is None:
