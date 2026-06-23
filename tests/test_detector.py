@@ -13,7 +13,10 @@ from src.detector import is_giveaway, is_giveaway_text
 from src.models import Post
 
 KEYWORDS = ["나눔"]
-EXCLUDE = ["후기", "나눔받", "나눔 받", "마감", "나눔완료"]
+# '마감'은 제외어에서 뺐다: 진행 중인 나눔글도 "마감 19:45"처럼 마감 '시각'을
+# 본문에 적는 경우가 많아, '마감' 두 글자로 거르면 진짜 나눔글까지 탈락했다.
+# (이미 끝난 나눔글인지 여부는 이제 AI가 본문을 읽고 판단한다)
+EXCLUDE = ["후기", "나눔받", "나눔 받", "나눔완료"]
 
 
 def _post(title: str) -> Post:
@@ -53,7 +56,15 @@ def test_exclude_received():
 
 
 def test_exclude_closed():
-    assert is_giveaway(_post("원두 나눔 마감되었습니다"), KEYWORDS, EXCLUDE) is False
+    # '나눔완료'는 명백히 끝난 글이므로 키워드 단계에서 거른다.
+    assert is_giveaway(_post("원두 나눔완료 했습니다"), KEYWORDS, EXCLUDE) is False
+
+
+def test_deadline_time_not_excluded():
+    # 회귀 테스트: 진행 중 나눔글이 마감 '시각'을 적었다고 탈락하면 안 된다.
+    # (예: 본문에 "나눔 마감 19:45" — '마감'을 제외어에서 뺀 이유)
+    body = "원두 나눔합니다. 줄 남겨주세요. 나눔 마감 19:45"
+    assert is_giveaway_text(body, KEYWORDS, EXCLUDE) is True
 
 
 # --- 미탐: 나눔과 무관하면 False ---

@@ -31,53 +31,58 @@ from .storage import SeenStore
 log = get_logger()
 
 
-def _is_real_giveaway(post, config, session, classifier) -> bool:
-    """이 글을 알릴 '진짜 나눔글'로 볼지 최종 판단한다.
+def _keyword_giveaway(post, body, config) -> bool:
+    """키워드 규칙만으로 나눔글 후보인지 판단한다. (AI 미사용/오류 시의 대체 수단)
 
-    2단계 판별:
-      1) 키워드 1차 필터(저렴 → 비쌈 순서):
-         a. 제목에 키워드가 있으면 바로 후보. (네트워크 비용 0)
-         b. 제목에 없으면 '본문'을 가져와 본문 키워드까지 검사한다.
-            (제목엔 '나눔'을 안 쓰고 본문에만 쓰는 글이 많아서 추가함)
-         → 제목·본문 어디에도 키워드가 없으면 여기서 탈락.
-      2) AI 2차 판별(정밀): 본문을 Gemini에게 보여 진짜 나눔글인지 묻는다.
-         - 1차에서 이미 받아온 본문이 있으면 그대로 재사용해 중복 요청을 막는다.
-         - AI가 없거나(키 미설정) 판단 불가(오류)면 1차 키워드 결과를 그대로 쓴다
-           (안전한 대체: AI가 죽어도 기존 동작 유지).
-
-    주의(비용): 제목에 키워드가 없는 글은 본문을 받아와야 하므로, 신규 글
-    대부분에 대해 디시로 추가 요청이 나간다. 차단/지연이 보이면 폴링 주기를
-    늘리는 걸로 대응한다.
+    제목 또는 본문 중 한 곳이라도 포함 키워드가 있고 제외어가 없으면 후보.
+    body 가 None 이면 본문은 검사하지 않는다(아직 안 받아온 경우).
     """
-    # 1차-a: 제목에 키워드가 있으면 본문을 안 봐도 후보 확정 (가장 쌈)
-    keyword_hit = is_giveaway(post, config.keywords, config.exclude_keywords)
-
-    # 본문은 한 번만 받아와 1차(본문 검사)와 2차(AI)에서 공유한다.
-    body = None
-
-    # 1차-b: 제목엔 없을 때만 본문을 받아와 본문 키워드까지 검사
-    if not keyword_hit:
-        body = fetch_body(post, config, session)
-        keyword_hit = is_giveaway_text(body, config.keywords, config.exclude_keywords)
-
-    # 제목·본문 어디에도 키워드 없음 → 탈락
-    if not keyword_hit:
-        return False
-
-    # AI 미사용 → 키워드 결과로 확정
-    if classifier is None:
+    if is_giveaway(post, config.keywords, config.exclude_keywords):
         return True
+    if body is not None:
+        return is_giveaway_text(body, config.keywords, config.exclude_keywords)
+    return False
 
-    # 2차: 본문을 AI에게 넘겨 진짜 나눔글인지 판단 요청
-    # (1차-b에서 이미 받아왔으면 재사용, 아니면 지금 받아온다)
-    if body is None:
-        body = fetch_body(post, config, session)
+
+def _is_real_giveaway(post, config, session, classifier) -> bool:
+    """이 글을 알릴 '진짜 원두 나눔글'로 볼지 최종 판단한다.
+
+    판별 전략은 'AI가 켜져 있는지'에 따라 둘로 나뉜다.
+
+    [AI 켜짐] 'AI 전수검사' — 키워드로 미리 거르지 않고, 새 글의 본문을 가져와
+        곧바로 AI에게 판단을 맡긴다. 이유: 커피갤 나눔글은 '나눔'이라는 단어
+        없이 "룰렛/추첨/줄서기" 같은 슬랭으로만 쓰는 경우가 많아, 키워드로 1차
+        필터링하면 진짜 나눔글을 놓친다(미탐). AI는 본문 의미를 이해하므로
+        단어가 없어도 '원두 나눔'을 잡아낸다.
+        - AI가 판단 불가(일시적 오류 등)면, 이미 받아온 본문으로 키워드 규칙을
+          돌려 안전하게 대체(fallback)한다. (놓침 방지)
+
+    [AI 꺼짐] 키워드 규칙만 사용 — 제목에 키워드가 있으면 바로 후보, 없으면
+        본문을 받아와 본문 키워드까지 검사한다. (AI가 없는 환경의 기존 동작)
+
+    주의(비용): AI 켜짐 모드는 '처음 보는 글마다' 본문 1회 + AI 1회를 호출한다.
+    같은 글은 seen 기록 덕분에 다시 호출하지 않으므로 '신규 글 수'만큼만 든다.
+    Gemini 무료 등급 한도(분당 요청수)에 걸리면 폴링 주기를 늘려 대응한다.
+    """
+    # --- AI 꺼짐: 기존 키워드 규칙(제목 → 본문)만으로 판단 ---
+    if classifier is None:
+        if _keyword_giveaway(post, None, config):  # 제목만으로 후보면 본문 생략
+            return True
+        body = fetch_body(post, config, session)  # 제목에 없으면 본문까지 확인
+        return _keyword_giveaway(post, body, config)
+
+    # --- AI 켜짐: 'AI 전수검사' — 본문을 받아 곧바로 AI에게 판단을 맡긴다 ---
+    body = fetch_body(post, config, session)
     result = classifier.classify(post.title, body)
 
     if result.decision is None:
-        # 판단 불가 → 키워드 결과로 대체(놓침 방지)
-        log.warning("AI 판단 불가, 키워드 결과 사용: [%s] %s", post.no, post.title)
-        return True
+        # AI 판단 불가(재시도까지 실패) → 받아둔 본문으로 키워드 규칙 대체
+        keyword_hit = _keyword_giveaway(post, body, config)
+        log.warning(
+            "AI 판단 불가, 키워드 결과로 대체: [%s] %s → %s",
+            post.no, post.title, "나눔후보" if keyword_hit else "제외",
+        )
+        return keyword_hit
 
     log.info(
         "AI 판별: [%s] %s → %s (품목=%s, %s)",
