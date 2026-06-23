@@ -9,7 +9,7 @@ import sys
 # tests/ 에서 실행해도 src 패키지를 import 할 수 있게 루트 경로 추가
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.detector import is_giveaway, is_giveaway_text
+from src.detector import has_any_keyword, is_giveaway, is_giveaway_text
 from src.models import Post
 
 KEYWORDS = ["나눔"]
@@ -97,3 +97,23 @@ def test_body_exclude_wins():
 def test_body_empty():
     # 본문 파싱 실패로 빈 문자열이 와도 죽지 않고 False.
     assert is_giveaway_text("", KEYWORDS, EXCLUDE) is False
+
+
+# --- 사전 필터: has_any_keyword (제외어 무시, '포함 신호'만 본다) ---
+SIGNALS = ["나눔", "룰렛", "추첨", "택비", "고닉"]
+
+
+def test_signal_present():
+    # 슬랭('룰렛')만 있어도 신호로 잡아 AI로 보낸다.
+    assert has_any_keyword("점심 심심해서 룰렛 돌림", SIGNALS) is True
+
+
+def test_signal_absent():
+    # 나눔과 무관한 잡담은 신호가 없어 AI를 건너뛴다.
+    assert has_any_keyword("오늘 라떼 맛있네요 다들 화이팅", SIGNALS) is False
+
+
+def test_signal_ignores_exclude():
+    # 제외어(후기)가 있어도 사전 필터는 '포함 신호'만 보므로 통과시킨다.
+    # (후기/마감 같은 최종 판단은 AI에게 맡긴다)
+    assert has_any_keyword("원두 나눔 받은 후기입니다", SIGNALS) is True

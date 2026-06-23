@@ -55,6 +55,17 @@ def is_giveaway_text(text: str, keywords: list[str], exclude_keywords: list[str]
     return False
 
 
+def has_any_keyword(text: str, keywords: list[str]) -> bool:
+    """텍스트에 주어진 키워드가 하나라도 있으면 True. (제외어는 보지 않음)
+
+    'AI 전수검사' 앞단의 느슨한 사전 필터용. 잡담/질문처럼 나눔 신호가 전혀
+    없는 글을 걸러 AI 호출(=무료 한도)을 아끼는 게 목적이라, 제외어 검사 없이
+    '포함 신호가 하나라도 있는지'만 본다. (재현율 우선)
+    """
+    norm = _normalize(text)
+    return any(_normalize(kw) in norm for kw in keywords if kw)
+
+
 def is_giveaway(post: Post, keywords: list[str], exclude_keywords: list[str]) -> bool:
     """게시글 '제목'이 나눔글 후보인지 판별한다. (제목 전용 진입점)
 

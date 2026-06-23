@@ -42,6 +42,13 @@ class _FakeClassifier:
         return self._result
 
 
+class _BoomClassifier:
+    """호출되면 실패하는 분류기. (사전 필터에서 걸러져 AI를 안 부르는지 검증용)"""
+
+    def classify(self, title, body):
+        raise AssertionError("사전 필터에서 걸렀어야 하는데 AI를 호출함")
+
+
 def _patch_body(monkeypatch, body: str):
     """fetch_body 를 네트워크 없이 고정 본문으로 대체한다."""
     monkeypatch.setattr(main, "fetch_body", lambda post, config, session: body)
@@ -60,11 +67,31 @@ def test_ai_catches_slang_giveaway_without_keyword(monkeypatch):
 
 
 def test_ai_rejects_non_giveaway(monkeypatch):
-    _patch_body(monkeypatch, "오늘 내린 라떼 맛있네요.")
+    # 신호('나눔')는 있어 사전 필터는 통과하지만, AI가 후기로 판정 → 제외
+    _patch_body(monkeypatch, "지난번 원두 나눔 받은 후기입니다. 잘 마셨어요.")
     clf = _FakeClassifier(
-        ClassifyResult(decision=False, item="없음", post_type="기타", reason="잡담")
+        ClassifyResult(decision=False, item="원두", post_type="후기", reason="받은 후기")
     )
-    assert main._is_real_giveaway(_post("라떼 후기"), _config(), None, clf) is False
+    assert main._is_real_giveaway(_post("나눔 후기"), _config(), None, clf) is False
+
+
+# --- 느슨한 사전 필터: 나눔 신호가 없으면 AI를 부르지 않는다(한도 절약) ---
+def test_prefilter_skips_ai_without_signal(monkeypatch):
+    # 제목·본문 어디에도 나눔 신호가 없는 잡담 → AI 호출 없이 즉시 제외
+    _patch_body(monkeypatch, "오늘 내린 라떼 정말 맛있네요. 다들 좋은 하루.")
+    # _BoomClassifier 가 불리면 테스트 실패 → '안 불렸음'을 보장
+    assert main._is_real_giveaway(_post("라떼 자랑"), _config(), None, _BoomClassifier()) is False
+
+
+def test_prefilter_disabled_sends_all_to_ai(monkeypatch):
+    # ai_prefilter_keywords=[] 이면 필터를 끄고 신호 없는 글도 AI로 보낸다(순수 전수검사)
+    cfg = _config()
+    cfg.ai_prefilter_keywords = []
+    _patch_body(monkeypatch, "오늘 내린 라떼 맛있네요.")  # 신호 없음
+    clf = _FakeClassifier(
+        ClassifyResult(decision=True, item="원두", post_type="나눔", reason="원두 나눔")
+    )
+    assert main._is_real_giveaway(_post("아무 제목"), cfg, None, clf) is True
 
 
 # --- AI 판단 불가: 받아둔 본문으로 키워드 규칙 대체 ---

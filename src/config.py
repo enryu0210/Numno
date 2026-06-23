@@ -30,6 +30,19 @@ DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(PROJECT_ROOT, "data")
 LOG_DIR = os.environ.get("LOG_DIR") or os.path.join(PROJECT_ROOT, "logs")
 
 
+# 무료 등급 RPD(하루 호출 수) 한도가 가장 넉넉하면서 system_instruction·JSON
+# 모드를 지원하는 모델. (최신/큰 모델일수록 무료 한도가 짜다 — 한 곳에서 관리)
+DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-lite"
+
+# 'AI 전수검사' 사전 필터 기본 신호 키워드.
+# (Config 기본값과 _build_config 가 공유 — 한 곳에서만 고치면 되게 상수로 둠)
+DEFAULT_PREFILTER_KEYWORDS = [
+    "나눔", "룰렛", "추첨", "당첨", "응모", "선착",
+    "드림", "드려", "드릴", "쏜다", "쏠게", "쏩니",
+    "착불", "반택", "택비", "택배비", "무료", "고닉",
+]
+
+
 class ConfigError(Exception):
     """설정이 잘못되었을 때 발생하는 예외."""
 
@@ -50,7 +63,19 @@ class Config:
     seen_limit: int = 1000
     # AI(제미나이) 판별용. 키가 비어 있으면 AI를 끄고 키워드 규칙만 쓴다.
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-3.5-flash"
+    # 무료 등급은 모델마다 '하루 호출 수(RPD)' 한도가 다르다. 최신/큰 모델일수록
+    # 한도가 짜다(예: gemini-3.5-flash는 하루 20회). flash-lite 계열이 무료
+    # RPD가 가장 넉넉(약 1,000회)하면서 system_instruction·JSON 모드를 지원한다.
+    gemini_model: str = DEFAULT_GEMINI_MODEL
+    # 'AI 전수검사' 앞단의 느슨한 사전 필터(네거티브 게이트)용 신호 키워드.
+    # 제목/본문에 이 신호가 하나라도 있는 글만 AI에게 보내, 잡담/질문 같은
+    # '나눔과 무관한 글'에 AI 호출(=무료 한도)을 낭비하지 않는다.
+    # 재현율을 위해 '나눔' 단어 외에 룰렛/추첨/드림/택비/고닉 등 디시 나눔
+    # 슬랭까지 넓게 잡는다. (제외어는 보지 않고 '포함'만 본다)
+    # 빈 리스트([])로 두면 사전 필터를 끄고 모든 새 글을 AI에 보낸다(순수 전수검사).
+    ai_prefilter_keywords: list[str] = field(
+        default_factory=lambda: list(DEFAULT_PREFILTER_KEYWORDS)
+    )
 
     @property
     def list_url(self) -> str:
@@ -83,7 +108,8 @@ def _build_config(
     exclude_categories: list[str] | None,
     seen_limit: int,
     gemini_api_key: str = "",
-    gemini_model: str = "gemini-3.5-flash",
+    gemini_model: str = DEFAULT_GEMINI_MODEL,
+    ai_prefilter_keywords: list[str] | None = None,
 ) -> Config:
     """공통 검증 후 Config 를 생성한다. (파일/환경변수 두 경로가 공유)"""
     # 필수값 검증 — 웹훅 URL이 비었거나 예시 그대로면 동작 불가
@@ -109,7 +135,14 @@ def _build_config(
         seen_limit=seen_limit,
         # AI는 선택 기능 — 키가 없으면 빈 문자열로 두고 키워드 규칙만 쓴다.
         gemini_api_key=(gemini_api_key or "").strip(),
-        gemini_model=(gemini_model or "gemini-3.5-flash").strip(),
+        gemini_model=(gemini_model or DEFAULT_GEMINI_MODEL).strip(),
+        # None(미설정)이면 기본 신호 목록을 쓰고, 빈 리스트([])를 주면
+        # '사전 필터 끔(전수검사)'으로 존중한다. (exclude_categories 와 같은 규칙)
+        ai_prefilter_keywords=(
+            ai_prefilter_keywords
+            if ai_prefilter_keywords is not None
+            else list(DEFAULT_PREFILTER_KEYWORDS)
+        ),
     )
 
 
@@ -130,7 +163,8 @@ def _load_from_file(path: str) -> Config:
         exclude_categories=raw.get("exclude_categories"),
         seen_limit=int(raw.get("seen_limit", 1000)),
         gemini_api_key=raw.get("gemini_api_key", ""),
-        gemini_model=raw.get("gemini_model", "gemini-3.5-flash"),
+        gemini_model=raw.get("gemini_model", DEFAULT_GEMINI_MODEL),
+        ai_prefilter_keywords=raw.get("ai_prefilter_keywords"),
     )
 
 
@@ -141,6 +175,7 @@ def _load_from_env() -> Config:
       DISCORD_WEBHOOK_URL  (필수)
       GALLERY_ID, POLL_INTERVAL_SEC, SEEN_LIMIT (선택)
       KEYWORDS, EXCLUDE_KEYWORDS, EXCLUDE_CATEGORIES  (선택, 쉼표로 구분)
+      AI_PREFILTER_KEYWORDS  (선택, 쉼표로 구분. AI 전수검사 사전 필터 신호)
       GEMINI_API_KEY, GEMINI_MODEL  (선택, AI 판별용)
     """
     env = os.environ
@@ -161,7 +196,8 @@ def _load_from_env() -> Config:
         exclude_categories=_split_keywords(env.get("EXCLUDE_CATEGORIES")),
         seen_limit=int(env.get("SEEN_LIMIT", "1000")),
         gemini_api_key=env.get("GEMINI_API_KEY", ""),
-        gemini_model=env.get("GEMINI_MODEL", "gemini-3.5-flash"),
+        gemini_model=env.get("GEMINI_MODEL", DEFAULT_GEMINI_MODEL),
+        ai_prefilter_keywords=_split_keywords(env.get("AI_PREFILTER_KEYWORDS")),
     )
 
 

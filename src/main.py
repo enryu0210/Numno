@@ -21,7 +21,7 @@ import requests
 
 from .ai_classifier import build_classifier
 from .config import ConfigError, load_config
-from .detector import is_giveaway, is_giveaway_text
+from .detector import has_any_keyword, is_giveaway, is_giveaway_text
 from .logger import get_logger
 from .notifier import send_discord
 from .post_fetcher import fetch_body
@@ -49,20 +49,24 @@ def _is_real_giveaway(post, config, session, classifier) -> bool:
 
     판별 전략은 'AI가 켜져 있는지'에 따라 둘로 나뉜다.
 
-    [AI 켜짐] 'AI 전수검사' — 키워드로 미리 거르지 않고, 새 글의 본문을 가져와
-        곧바로 AI에게 판단을 맡긴다. 이유: 커피갤 나눔글은 '나눔'이라는 단어
-        없이 "룰렛/추첨/줄서기" 같은 슬랭으로만 쓰는 경우가 많아, 키워드로 1차
-        필터링하면 진짜 나눔글을 놓친다(미탐). AI는 본문 의미를 이해하므로
-        단어가 없어도 '원두 나눔'을 잡아낸다.
-        - AI가 판단 불가(일시적 오류 등)면, 이미 받아온 본문으로 키워드 규칙을
-          돌려 안전하게 대체(fallback)한다. (놓침 방지)
+    [AI 켜짐] 'AI 전수검사(+ 느슨한 사전 필터)' — 새 글의 본문을 가져온 뒤,
+        제목/본문에 나눔 '신호'(나눔/룰렛/추첨/택비/고닉 등)가 하나라도 있는
+        글만 AI에게 보낸다. 이유: 커피갤 나눔글은 '나눔'이라는 단어 없이
+        "룰렛/추첨/줄서기" 같은 슬랭으로만 쓰는 경우가 많아 키워드로 '정밀'
+        필터링하면 진짜 나눔글을 놓치지만(미탐), 잡담/질문처럼 나눔 신호가
+        '전혀' 없는 글까지 AI에 보내면 무료 호출 한도(RPD)를 금방 소진한다.
+        그래서 넓은 신호로 명백한 무관글만 싸게 걸러 AI 호출을 아낀다.
+        (신호 목록이 비어 있으면[config] 사전 필터를 끄고 모든 글을 AI에 보냄)
+        - AI가 판단 불가(일시적 오류·한도 초과 등)면, 이미 받아온 본문으로
+          키워드 규칙을 돌려 안전하게 대체(fallback)한다. (놓침 방지)
 
     [AI 꺼짐] 키워드 규칙만 사용 — 제목에 키워드가 있으면 바로 후보, 없으면
         본문을 받아와 본문 키워드까지 검사한다. (AI가 없는 환경의 기존 동작)
 
-    주의(비용): AI 켜짐 모드는 '처음 보는 글마다' 본문 1회 + AI 1회를 호출한다.
-    같은 글은 seen 기록 덕분에 다시 호출하지 않으므로 '신규 글 수'만큼만 든다.
-    Gemini 무료 등급 한도(분당 요청수)에 걸리면 폴링 주기를 늘려 대응한다.
+    주의(비용): AI 켜짐 모드는 사전 필터를 통과한 '신규 글마다' AI 1회를
+    호출한다. 같은 글은 seen 기록 덕분에 다시 호출하지 않는다. 무료 등급의
+    일일 한도(RPD)에 걸리면 모델을 한도가 큰 것(flash-lite)으로 바꾸거나
+    사전 필터 신호를 좁혀 호출량을 더 줄인다.
     """
     # --- AI 꺼짐: 기존 키워드 규칙(제목 → 본문)만으로 판단 ---
     if classifier is None:
@@ -71,8 +75,17 @@ def _is_real_giveaway(post, config, session, classifier) -> bool:
         body = fetch_body(post, config, session)  # 제목에 없으면 본문까지 확인
         return _keyword_giveaway(post, body, config)
 
-    # --- AI 켜짐: 'AI 전수검사' — 본문을 받아 곧바로 AI에게 판단을 맡긴다 ---
+    # --- AI 켜짐: 본문을 받아온다 (본문 받기는 무료 — AI 호출만 한도를 쓴다) ---
     body = fetch_body(post, config, session)
+
+    # 느슨한 사전 필터: 제목/본문에 나눔 신호가 '하나도' 없으면 AI 호출을 생략한다.
+    # (신호 목록이 비어 있으면 필터를 끄고 통과 — 순수 전수검사)
+    signals = config.ai_prefilter_keywords
+    if signals and not has_any_keyword(f"{post.title}\n{body}", signals):
+        log.info("사전 필터: 나눔 신호 없어 AI 생략: [%s] %s", post.no, post.title)
+        return False
+
+    # AI 전수검사: 본문을 AI에게 넘겨 '원두 나눔'인지 판단
     result = classifier.classify(post.title, body)
 
     if result.decision is None:
