@@ -57,18 +57,24 @@ def fetch_posts(config: Config, session) -> list[Post]:
         log.warning("리스트 요청 중 예외: %s", e)
         return []
 
-    return _parse_list(resp.text, config.gallery_id)
+    return _parse_list(resp.text, config.gallery_id, config.exclude_categories)
 
 
-def _parse_list(html: str, gallery_id: str) -> list[Post]:
-    """리스트 HTML 문자열을 Post 목록으로 파싱한다. (네트워크와 분리된 순수 함수)"""
+def _parse_list(
+    html: str, gallery_id: str, exclude_categories: list[str] | None = None
+) -> list[Post]:
+    """리스트 HTML 문자열을 Post 목록으로 파싱한다. (네트워크와 분리된 순수 함수)
+
+    exclude_categories 에 든 말머리(예: "원두후기")가 붙은 글은 결과에서 뺀다.
+    """
     soup = BeautifulSoup(html, "lxml")
     posts: list[Post] = []
+    exclude_categories = exclude_categories or []
 
     # 실제 게시글 행은 'us-post' 클래스 + data-no 속성을 가진다.
     for row in soup.select("tr.us-post[data-no]"):
         try:
-            post = _parse_row(row, gallery_id)
+            post = _parse_row(row, gallery_id, exclude_categories)
         except Exception as e:
             # 한 행 파싱 실패가 전체를 멈추지 않도록 행 단위로 방어
             log.debug("행 파싱 실패(무시): %s", e)
@@ -79,7 +85,23 @@ def _parse_list(html: str, gallery_id: str) -> list[Post]:
     return posts
 
 
-def _parse_row(row, gallery_id: str) -> Post | None:
+def _extract_category(subject_cell) -> str:
+    """말머리 셀에서 '전체 말머리 이름'을 뽑는다.
+
+    디시는 말머리가 길면 리스트 셀엔 줄임말("원두후")만 보이고, 전체 이름
+    ("원두후기")은 숨겨진 <p class="subject_inner"> 안에 넣어둔다.
+    이때 셀 전체 텍스트를 그냥 읽으면 줄임말+전체가 붙어("원두후원두후기")
+    엉뚱한 값이 나오므로, subject_inner 가 있으면 그걸 우선 사용한다.
+    """
+    if subject_cell is None:
+        return ""
+    inner = subject_cell.select_one(".subject_inner")
+    if inner is not None:
+        return inner.get_text(strip=True)
+    return subject_cell.get_text(strip=True)
+
+
+def _parse_row(row, gallery_id: str, exclude_categories: list[str]) -> Post | None:
     """게시글 한 행(<tr>)을 Post 로 변환한다. 게시글이 아니면 None."""
     # 공지/AD 행 제외 (data-type 에 notice/ad 가 들어감)
     data_type = row.get("data-type", "")
@@ -92,10 +114,13 @@ def _parse_row(row, gallery_id: str) -> Post | None:
     if not num_text.isdigit():
         return None
 
-    # 말머리(없을 수 있음). '공지'면 제외.
+    # 말머리(없을 수 있음). '공지'와 제외 말머리(예: 원두후기)는 여기서 거른다.
     subject_cell = row.select_one("td.gall_subject")
-    category = subject_cell.get_text(strip=True) if subject_cell else ""
+    category = _extract_category(subject_cell)
     if category == "공지":
+        return None
+    if category in exclude_categories:
+        log.debug("제외 말머리(%s) 글 건너뜀: %s", category, num_text)
         return None
 
     # 제목 + 링크: gall_tit 안의 글 보기 링크(a)를 찾는다.

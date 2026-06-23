@@ -80,9 +80,9 @@ def _is_real_giveaway(post, config, session, classifier) -> bool:
         return True
 
     log.info(
-        "AI 판별: [%s] %s → %s (%s)",
+        "AI 판별: [%s] %s → %s (품목=%s, %s)",
         post.no, post.title,
-        "나눔" if result.decision else "제외", result.reason,
+        "원두나눔" if result.decision else "제외", result.item, result.reason,
     )
     return result.decision
 

@@ -43,6 +43,10 @@ class Config:
     poll_interval_sec: int = 180
     keywords: list[str] = field(default_factory=lambda: ["나눔"])
     exclude_keywords: list[str] = field(default_factory=list)
+    # 제외할 '말머리(카테고리)' 목록. 이 말머리가 붙은 글은 리스트 단계에서
+    # 아예 후보에서 빼버린다. '원두후기' 탭에는 '나눔 원두 후기'도 올라와
+    # 키워드/AI로도 새기 쉬우므로, 말머리 자체로 먼저 걸러 오탐을 줄인다.
+    exclude_categories: list[str] = field(default_factory=lambda: ["원두후기"])
     seen_limit: int = 1000
     # AI(제미나이) 판별용. 키가 비어 있으면 AI를 끄고 키워드 규칙만 쓴다.
     gemini_api_key: str = ""
@@ -76,6 +80,7 @@ def _build_config(
     poll_interval_sec: int,
     keywords: list[str] | None,
     exclude_keywords: list[str] | None,
+    exclude_categories: list[str] | None,
     seen_limit: int,
     gemini_api_key: str = "",
     gemini_model: str = "gemini-3.5-flash",
@@ -96,6 +101,11 @@ def _build_config(
         poll_interval_sec=poll_interval_sec,
         keywords=keywords or ["나눔"],
         exclude_keywords=exclude_keywords or [],
+        # None(미설정)이면 기본값 ["원두후기"]를 쓰고, 빈 리스트([])를 주면
+        # '아무 말머리도 제외하지 않음'으로 존중한다. (의도적 비활성화 허용)
+        exclude_categories=(
+            exclude_categories if exclude_categories is not None else ["원두후기"]
+        ),
         seen_limit=seen_limit,
         # AI는 선택 기능 — 키가 없으면 빈 문자열로 두고 키워드 규칙만 쓴다.
         gemini_api_key=(gemini_api_key or "").strip(),
@@ -117,6 +127,7 @@ def _load_from_file(path: str) -> Config:
         poll_interval_sec=int(raw.get("poll_interval_sec", 180)),
         keywords=raw.get("keywords"),
         exclude_keywords=raw.get("exclude_keywords"),
+        exclude_categories=raw.get("exclude_categories"),
         seen_limit=int(raw.get("seen_limit", 1000)),
         gemini_api_key=raw.get("gemini_api_key", ""),
         gemini_model=raw.get("gemini_model", "gemini-3.5-flash"),
@@ -129,7 +140,7 @@ def _load_from_env() -> Config:
     지원 환경변수:
       DISCORD_WEBHOOK_URL  (필수)
       GALLERY_ID, POLL_INTERVAL_SEC, SEEN_LIMIT (선택)
-      KEYWORDS, EXCLUDE_KEYWORDS  (선택, 쉼표로 구분)
+      KEYWORDS, EXCLUDE_KEYWORDS, EXCLUDE_CATEGORIES  (선택, 쉼표로 구분)
       GEMINI_API_KEY, GEMINI_MODEL  (선택, AI 판별용)
     """
     env = os.environ
@@ -147,6 +158,7 @@ def _load_from_env() -> Config:
         poll_interval_sec=int(env.get("POLL_INTERVAL_SEC", "180")),
         keywords=_split_keywords(env.get("KEYWORDS")),
         exclude_keywords=_split_keywords(env.get("EXCLUDE_KEYWORDS")),
+        exclude_categories=_split_keywords(env.get("EXCLUDE_CATEGORIES")),
         seen_limit=int(env.get("SEEN_LIMIT", "1000")),
         gemini_api_key=env.get("GEMINI_API_KEY", ""),
         gemini_model=env.get("GEMINI_MODEL", "gemini-3.5-flash"),

@@ -4,6 +4,7 @@
   "poll_interval_sec": 180,
   "keywords": ["나눔"],
   "exclude_keywords": ["후기", "나눔받", "나눔 받", "마감", "나눔완료"],
+  "exclude_categories": ["원두후기"],
   "seen_limit": 1000,
   "gemini_api_key": "여기에_구글_AI_스튜디오_무료_API_키를_붙여넣으세요",
   "gemini_model": "gemini-3.5-flash"
