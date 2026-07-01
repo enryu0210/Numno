@@ -61,7 +61,7 @@ pip install -r requirements.txt
   "ai_prefilter_keywords": ["나눔", "룰렛", "추첨", "당첨", "응모", "선착", "드림", "드려", "드릴", "쏜다", "쏠게", "쏩니", "착불", "반택", "택비", "택배비", "무료", "고닉"],
   "seen_limit": 1000,
   "gemini_api_key": "구글_AI_스튜디오에서_받은_무료_API_키",
-  "gemini_model": "gemini-2.5-flash-lite"
+  "gemini_model": "gemma-4-26b-a4b-it"
 }
 ```
 
@@ -75,21 +75,28 @@ pip install -r requirements.txt
 | `exclude_categories` | 제외할 말머리 목록. 이 말머리 글은 리스트에서 통째로 거름 (기본 `["원두후기"]`, `[]`로 두면 비활성화) |
 | `ai_prefilter_keywords` | **AI 전수검사 사전 필터** 신호. 제목/본문에 이 신호가 하나라도 있는 글만 AI에 보내 무료 호출 한도를 아낌 (기본 넓은 슬랭 목록, `[]`로 두면 필터 끄고 모든 글을 AI에 보냄) |
 | `seen_limit` | 기억할 최근 글 개수 |
-| `gemini_api_key` | (선택) AI 판별용 Gemini 무료 API 키. **비워두면 AI를 끄고 키워드만 사용** |
-| `gemini_model` | (선택) 사용할 Gemini 모델. 기본 `gemini-2.5-flash-lite`(무료 일일 한도가 가장 넉넉) |
+| `gemini_api_key` | (선택) AI 판별용 구글 AI Studio 무료 API 키. **비워두면 AI를 끄고 키워드만 사용** (Gemini/Gemma 공용 키) |
+| `gemini_model` | (선택) 사용할 AI 모델. 기본 `gemma-4-26b-a4b-it`(무료 일일 한도가 넉넉한 오픈모델). 더 똑똑하게 하려면 `gemma-4-31b-it` |
 
-### 🤖 AI 판별용 Gemini 무료 키 받기
+### 🤖 AI 판별용 무료 키 받기 (Gemini/Gemma 공용)
 
 1. [Google AI Studio](https://aistudio.google.com/apikey)에 구글 계정으로 로그인합니다.
 2. **Create API key** 를 눌러 키를 발급받습니다. (개인용 무료 등급으로 충분합니다)
 3. 발급된 키를 `config.json`의 `gemini_api_key`(또는 환경변수 `GEMINI_API_KEY`)에 넣습니다.
 
-> 무료 등급은 모델마다 **하루 호출 수(RPD)** 한도가 다릅니다. 최신/큰 모델일수록 짜서
-> (예: `gemini-3.5-flash`는 하루 20회) 금방 소진됩니다. 기본값 `gemini-2.5-flash-lite`는
-> 무료 RPD가 가장 넉넉(약 1,000회)하면서 필요한 기능(시스템 지침·JSON 모드)을 지원합니다.
+> **왜 Gemma를 기본으로 쓰나?** 무료 등급은 모델마다 **하루 호출 수(RPD)** 한도가
+> 다른데, Gemini 계열은 최신/큰 모델일수록 짜서(예: `gemini-3.5-flash`는 하루 20회)
+> 나눔 '전수검사'엔 금방 소진됩니다. 같은 키로 부를 수 있는 구글 오픈모델 **Gemma**
+> 계열이 한도가 더 넉넉해 기본값으로 둡니다. `gemma-4-26b-a4b-it` 는 MoE(활성
+> 파라미터가 작음)라 가볍고 빨라 단순 분류에 알맞습니다.
+>
+> ⚠️ **주의**: Gemma는 사고(thinking) 기능이 없고, JSON을 확실히 받으려면 응답
+> 스키마를 함께 줘야 합니다. 이 차이는 코드가 **모델 이름을 보고 자동 처리**하므로
+> (`gemma`로 시작하면 Gemma 방식) 설정에선 이름만 바꾸면 됩니다. E2B/E4B 같은
+> 초경량 Gemma는 **API에 호스팅되지 않아**(로컬 Ollama 전용) 클라우드에선 못 씁니다.
+>
 > 여기에 위 **사전 필터**가 잡담/질문을 걸러줘 호출량을 크게 줄입니다. 그래도 한도에
-> 걸리면 한도가 더 큰 모델로 바꾸거나 `ai_prefilter_keywords` 신호를 좁히세요.
-> (한 번 본 글은 다시 부르지 않습니다)
+> 걸리면 `ai_prefilter_keywords` 신호를 좁히세요. (한 번 본 글은 다시 부르지 않습니다)
 
 ## 실행
 
@@ -134,8 +141,8 @@ python -m pytest tests/ -v
 | `EXCLUDE_CATEGORIES` | | 제외 말머리(쉼표 구분, 기본 `원두후기`) | `원두후기` |
 | `AI_PREFILTER_KEYWORDS` | | AI 전수검사 사전 필터 신호(쉼표 구분) | `나눔,룰렛,추첨,드림,택비,고닉` |
 | `SEEN_LIMIT` | | 기억할 최근 글 개수 | `1000` |
-| `GEMINI_API_KEY` | | AI 판별용 Gemini 무료 키(없으면 AI 끔) | `AIza...` |
-| `GEMINI_MODEL` | | 사용할 Gemini 모델 | `gemini-2.5-flash-lite` |
+| `GEMINI_API_KEY` | | AI 판별용 구글 AI Studio 무료 키(없으면 AI 끔, Gemini/Gemma 공용) | `AIza...` |
+| `GEMINI_MODEL` | | 사용할 AI 모델 | `gemma-4-26b-a4b-it` |
 
 ### ⚠️ 꼭 알아야 할 점: Volume(영구 디스크) 연결
 

@@ -30,9 +30,14 @@ DATA_DIR = os.environ.get("DATA_DIR") or os.path.join(PROJECT_ROOT, "data")
 LOG_DIR = os.environ.get("LOG_DIR") or os.path.join(PROJECT_ROOT, "logs")
 
 
-# 무료 등급 RPD(하루 호출 수) 한도가 가장 넉넉하면서 system_instruction·JSON
-# 모드를 지원하는 모델. (최신/큰 모델일수록 무료 한도가 짜다 — 한 곳에서 관리)
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-lite"
+# 기본 AI 모델. Gemini 계열은 무료 하루 호출 수(RPD) 한도가 짜서(예: flash-lite
+# ~1,000회) 나눔 '전수검사'에는 금방 소진된다. 그래서 같은 API·키로 부를 수 있으면서
+# 무료 한도가 더 넉넉한 구글 오픈모델 Gemma 계열을 기본으로 쓴다.
+# gemma-4-26b-a4b-it 는 MoE(활성 파라미터가 작아) 가볍고 빨라 단순 분류에 적합하다.
+# 더 똑똑한 판별이 필요하면 gemma-4-31b-it(밀집 모델)로 바꿀 수 있다.
+# (Gemma는 사고 기능이 없고 JSON 스키마를 함께 줘야 하는데, ai_classifier 가
+#  모델 이름을 보고 옵션을 자동 분기하므로 여기선 이름만 바꾸면 된다)
+DEFAULT_GEMINI_MODEL = "gemma-4-26b-a4b-it"
 
 # 'AI 전수검사' 사전 필터 기본 신호 키워드.
 # (Config 기본값과 _build_config 가 공유 — 한 곳에서만 고치면 되게 상수로 둠)
@@ -63,9 +68,10 @@ class Config:
     seen_limit: int = 1000
     # AI(제미나이) 판별용. 키가 비어 있으면 AI를 끄고 키워드 규칙만 쓴다.
     gemini_api_key: str = ""
-    # 무료 등급은 모델마다 '하루 호출 수(RPD)' 한도가 다르다. 최신/큰 모델일수록
-    # 한도가 짜다(예: gemini-3.5-flash는 하루 20회). flash-lite 계열이 무료
-    # RPD가 가장 넉넉(약 1,000회)하면서 system_instruction·JSON 모드를 지원한다.
+    # 사용할 AI 모델 이름. Gemini/Gemma 를 같은 키로 부를 수 있고, 모델마다 무료
+    # '하루 호출 수(RPD)' 한도가 다르다. 기본값 gemma-4-26b-a4b-it 는 한도가 넉넉해
+    # 나눔 전수검사에 유리하다. (키 이름이 gemini_* 인 건 '구글 AI Studio 키'라는
+    # 뜻일 뿐, Gemma에도 같은 키를 쓴다 — 하위호환을 위해 이름은 유지한다)
     gemini_model: str = DEFAULT_GEMINI_MODEL
     # 'AI 전수검사' 앞단의 느슨한 사전 필터(네거티브 게이트)용 신호 키워드.
     # 제목/본문에 이 신호가 하나라도 있는 글만 AI에게 보내, 잡담/질문 같은

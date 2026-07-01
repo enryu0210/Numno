@@ -55,6 +55,22 @@ def test_parse_review_is_false():
     assert r.post_type == "후기"
 
 
+def test_parse_markdown_fenced_json():
+    # Gemma가 스키마를 무시하고 ```json ... ``` 코드펜스로 감싸도 안전하게 파싱해야 함
+    fenced = '```json\n{"is_giveaway": true, "item": "원두", "post_type": "나눔", "reason": "원두 나눔"}\n```'
+    r = _parse_response(fenced)
+    assert r.decision is True
+    assert r.item == "원두"
+
+
+def test_parse_json_with_leading_text():
+    # 앞뒤에 설명이 섞여도 JSON 본문({...})만 추려 파싱해야 함
+    messy = '네, 판단 결과입니다: {"is_giveaway": false, "item": "장비", "post_type": "나눔", "reason": "그라인더 나눔"} 이상입니다.'
+    r = _parse_response(messy)
+    assert r.decision is False
+    assert r.item == "장비"
+
+
 def test_parse_broken_json_is_undecided():
     # 깨진 응답 → 판단 불가(None) → 상위에서 키워드 규칙으로 대체
     assert _parse_response("이건 JSON이 아님").decision is None
